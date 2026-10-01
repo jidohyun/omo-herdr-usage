@@ -82,6 +82,7 @@ function parseConfig(argv: string[], file: SourceConfig): Config {
   const sources: SourceConfig = {
     codexAccount: v["codex-account"] ?? file.codexAccount,
     codexbar: v.codexbar ?? file.codexbar,
+    omoAccounts: file.omoAccounts,
   };
   return { once: v.once === true, intervalSec, fixture: v.fixture ?? null, color, sources, closePane: v["close-pane"] ?? null, anchor: v.anchor ?? null };
 }
@@ -126,6 +127,7 @@ function runLive(cfg: Config): void {
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let restored = false;
   let placing = false;
+  let renderedLines = 0;
   let notice: { text: string; until: number } | null = null;
   const baseFooter = cfg.closePane === null ? " q 종료 · r 새로고침" : " q 종료 · r 새로고침 · 방향키 한 칸 이동 · 두 방향 연달아(↑→) 모서리";
 
@@ -156,6 +158,7 @@ function runLive(cfg: Config): void {
       nextRefreshAt: fetching ? null : nextRefreshAt,
       footer: notice && notice.until > Date.now() ? `${baseFooter} · ${notice.text}` : baseFooter,
     });
+    renderedLines = all.length;
     const lines = all.length > rows ? [...all.slice(0, Math.max(0, rows - 1)), all[all.length - 1] ?? ""] : all;
     out.write("\x1b[H" + lines.map((l) => l + "\x1b[K").join("\r\n") + "\x1b[J");
   }
@@ -183,7 +186,7 @@ function runLive(cfg: Config): void {
     notice = { text: "옮기는 중…", until: Date.now() + 10_000 };
     draw();
     try {
-      notice = { text: await placePane(herdrPane, cfg.closePane, cfg.anchor, position, relative), until: Date.now() + 4000 };
+      notice = { text: await placePane(herdrPane, cfg.closePane, cfg.anchor, position, relative, Math.max(14, renderedLines + 1)), until: Date.now() + 4000 };
     } catch (error) {
       notice = { text: `⚠ ${error instanceof Error ? error.message : String(error)}`, until: Date.now() + 8000 };
     }

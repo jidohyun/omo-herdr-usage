@@ -23,6 +23,7 @@ Claude와 Codex는 각 CLI가 이미 저장해 둔 로그인 토큰으로 사용
 
 - Claude: 키체인의 `Claude Code-credentials` 토큰으로 `api.anthropic.com/api/oauth/usage` 조회
 - Codex: `auth.json` 토큰으로 `chatgpt.com/backend-api/wham/usage` 조회
+- **omo 계정:** omo에 등록한 Claude·GPT 계정(`~/.omo/agent/auth.json`)을 전부 읽어 계정마다 따로 보여 줍니다. omo에서 계정을 추가하면 다음 갱신 때 자동으로 나타납니다. Claude Code·Codex 로그인과 같은 계정(같은 이메일)은 한 번만 보여 줍니다. 토큰이 만료된 omo 계정은 "omo에서 다시 로그인" 안내가 뜹니다.
 
 두 API 모두 공개 문서가 없는 내부 API라 바뀔 수 있습니다. 토큰은 읽기만 하고 갱신하지 않습니다.
 
@@ -61,7 +62,7 @@ bun run build   # dist/aiusage 단일 바이너리 생성
 { "codexAccount": "product@example.com", "codexbar": false }
 ```
 
-`codexAccount`는 CodexBar 관리 계정(`managed-codex-accounts.json`)에서 이메일로 찾고, 없으면 `~/.codex` 로그인 계정과 비교합니다. 비워 두면 `CODEX_HOME` 또는 `~/.codex` 계정을 씁니다.
+`"omoAccounts": false`로 omo 계정 표시를 끌 수 있습니다. `codexAccount`는 CodexBar 관리 계정(`managed-codex-accounts.json`)에서 이메일로 찾고, 없으면 `~/.codex` 로그인 계정과 비교합니다. 비워 두면 `CODEX_HOME` 또는 `~/.codex` 계정을 씁니다.
 
 ## omo 확장 (herdr pane)
 

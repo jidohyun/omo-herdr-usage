@@ -136,7 +136,7 @@ export interface Scale {
   y: number;
 }
 
-export function planPlacement(layout: Layout, anchor: string | null, position: Position, scale: Scale = { x: 1, y: 1 }): Plan | string {
+export function planPlacement(layout: Layout, anchor: string | null, position: Position, scale: Scale = { x: 1, y: 1 }, rows = WANT_ROWS): Plan | string {
   const panes = layout.panes;
   if (panes.length === 0) return "이 탭에 붙일 다른 pane이 없음";
   if (position === "up" || position === "down" || position === "left" || position === "right") {
@@ -148,7 +148,7 @@ export function planPlacement(layout: Layout, anchor: string | null, position: P
     return {
       target: target.id,
       split: vertical ? "down" : "right",
-      ratio: ratioFor(vertical ? target.rect.height : target.rect.width, vertical ? WANT_ROWS / scale.y : WANT_COLS / scale.x, usageFirst),
+      ratio: ratioFor(vertical ? target.rect.height : target.rect.width, vertical ? rows / scale.y : WANT_COLS / scale.x, usageFirst),
       swap: usageFirst,
     };
   }
@@ -156,7 +156,7 @@ export function planPlacement(layout: Layout, anchor: string | null, position: P
   const target = panes.find((p) => contains(p.rect, x, y));
   if (!target) return `${POSITION_LABELS[position]} 모서리에 있는 pane을 찾지 못함`;
   const usageFirst = position === "top-left" || position === "top-right";
-  return { target: target.id, split: "down", ratio: ratioFor(target.rect.height, WANT_ROWS / scale.y, usageFirst), swap: usageFirst };
+  return { target: target.id, split: "down", ratio: ratioFor(target.rect.height, rows / scale.y, usageFirst), swap: usageFirst };
 }
 
 export type HerdrRun = (...args: string[]) => Promise<unknown>;
@@ -235,14 +235,14 @@ export function planStep(layout: Layout, paneId: string, side: Side): Step | str
   return { target: (dest[Math.min(index, dest.length) - 1] ?? n).id, mode: "stack", first: false };
 }
 
-function stepPlan(layout: Layout, step: Step, scale: Scale): Plan | string {
+function stepPlan(layout: Layout, step: Step, scale: Scale, rows = WANT_ROWS): Plan | string {
   const target = layout.panes.find((p) => p.id === step.target);
   if (!target) return "옮길 기준 pane이 사라짐";
   const stack = step.mode === "stack";
   return {
     target: target.id,
     split: stack ? "down" : "right",
-    ratio: ratioFor(stack ? target.rect.height : target.rect.width, stack ? WANT_ROWS / scale.y : WANT_COLS / scale.x, step.first),
+    ratio: ratioFor(stack ? target.rect.height : target.rect.width, stack ? rows / scale.y : WANT_COLS / scale.x, step.first),
     swap: step.first,
   };
 }
@@ -273,7 +273,7 @@ async function measureScale(herdr: HerdrRun, panes: LayoutPane[]): Promise<Scale
   return s === undefined ? { x: 1, y: 1 } : { x: s, y: s };
 }
 
-export async function placePane(herdr: HerdrRun, paneId: string, anchor: string | null, requested: Position, relative = false): Promise<string> {
+export async function placePane(herdr: HerdrRun, paneId: string, anchor: string | null, requested: Position, relative = false, wantRows = WANT_ROWS): Promise<string> {
   const before = parseLayout(await herdr("layout", "--pane", paneId));
   if (!before) throw new Error("pane 배치 정보를 읽지 못함");
   const others = before.panes.filter((p) => p.id !== paneId);
@@ -291,7 +291,7 @@ export async function placePane(herdr: HerdrRun, paneId: string, anchor: string 
   try {
     const layout = parseLayout(await herdr("layout", "--pane", home.id));
     if (!layout) throw new Error("원래 탭 배치 정보를 읽지 못함");
-    const plan = step ? stepPlan(layout, step, scale) : planPlacement(layout, anchor, requested, scale);
+    const plan = step ? stepPlan(layout, step, scale, wantRows) : planPlacement(layout, anchor, requested, scale, wantRows);
     if (typeof plan === "string") throw new Error(plan);
     await herdr("move", paneId, "--tab", before.tabId, "--split", plan.split, "--target-pane", plan.target, "--ratio", String(plan.ratio), "--focus");
     if (plan.swap) await herdr("swap", "--source-pane", paneId, "--target-pane", plan.target);

@@ -88,9 +88,38 @@ export interface ClaudeOptions {
   timeoutMs?: number;
   now?: () => Date;
   cooldown?: Cooldown;
+  provider?: string;
+  account?: string | null;
+  expiredMessage?: string;
 }
 
 export const claudeCooldown: Cooldown = { until: 0 };
+
+export const CLAUDE_PROFILE_URL = "https://api.anthropic.com/api/oauth/profile";
+export interface ClaudeProfile {
+  email: string | null;
+  plan: string | null;
+}
+
+const profiles = new Map<string, ClaudeProfile>();
+
+export function parseClaudeProfile(raw: unknown): ClaudeProfile {
+  const o = isObj(raw) ? raw : {};
+  const account = isObj(o["account"]) ? o["account"] : {};
+  const org = isObj(o["organization"]) ? o["organization"] : {};
+  const type = str(org["organization_type"])?.replace(/^claude_/, "") ?? null;
+  return { email: str(account["email"]), plan: type ? planFrom({ subscriptionType: type, rateLimitTier: org["rate_limit_tier"] }) : null };
+}
+
+export async function claudeProfile(accessToken: string, fetchImpl: FetchLike = fetch, timeoutMs = 10_000): Promise<ClaudeProfile> {
+  const hit = profiles.get(accessToken);
+  if (hit) return hit;
+  const res = await getJson(CLAUDE_PROFILE_URL, { Authorization: `Bearer ${accessToken}`, "anthropic-beta": "oauth-2025-04-20" }, fetchImpl, timeoutMs);
+  if (!res.ok) return { email: null, plan: null };
+  const profile = parseClaudeProfile(res.json);
+  profiles.set(accessToken, profile);
+  return profile;
+}
 
 function rateLimited(untilMs: number): string {
   return `Claude 요청 제한 (429) - ${new Date(untilMs).toLocaleTimeString("en-GB", { hour12: false })} 이후 다시 조회`;
@@ -99,11 +128,13 @@ function rateLimited(untilMs: number): string {
 export async function fetchClaude(opts: ClaudeOptions = {}): Promise<ProviderUsage> {
   const now = opts.now ?? (() => new Date());
   const cooldown = opts.cooldown ?? claudeCooldown;
+  const id = opts.provider ?? "claude";
+  const expired = opts.expiredMessage ?? EXPIRED;
   const creds = await (opts.readCredentials ?? readClaudeKeychain)();
-  if (typeof creds === "string") return failedProvider("claude", "Claude", creds);
-  const base = { plan: creds.plan };
-  if (creds.expiresAt !== null && creds.expiresAt <= now().getTime()) return failedProvider("claude", "Claude", EXPIRED, base);
-  if (cooldown.until > now().getTime()) return failedProvider("claude", "Claude", rateLimited(cooldown.until), base);
+  if (typeof creds === "string") return failedProvider(id, "Claude", creds, { account: opts.account ?? null });
+  const base = { plan: creds.plan, account: opts.account ?? null };
+  if (creds.expiresAt !== null && creds.expiresAt <= now().getTime()) return failedProvider(id, "Claude", expired, base);
+  if (cooldown.until > now().getTime()) return failedProvider(id, "Claude", rateLimited(cooldown.until), base);
   const res = await getJson(
     CLAUDE_USAGE_URL,
     { Authorization: `Bearer ${creds.accessToken}`, "anthropic-beta": "oauth-2025-04-20" },
@@ -112,15 +143,15 @@ export async function fetchClaude(opts: ClaudeOptions = {}): Promise<ProviderUsa
   );
   if (!res.ok && res.status === 429) {
     cooldown.until = now().getTime() + (res.retryAfterSec ?? 60) * 1000;
-    return failedProvider("claude", "Claude", rateLimited(cooldown.until), base);
+    return failedProvider(id, "Claude", rateLimited(cooldown.until), base);
   }
-  if (!res.ok) return failedProvider("claude", "Claude", res.status === 401 ? EXPIRED : `Claude 사용량 조회 실패: ${res.message}`, base);
+  if (!res.ok) return failedProvider(id, "Claude", res.status === 401 ? expired : `Claude 사용량 조회 실패: ${res.message}`, base);
   const at = now();
   return {
-    provider: "claude",
+    provider: id,
     displayName: "Claude",
     plan: creds.plan,
-    account: null,
+    account: opts.account ?? null,
     source: "api",
     updatedAt: at,
     windows: parseClaudeUsage(res.json, at),

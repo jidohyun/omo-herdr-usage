@@ -119,17 +119,31 @@ export interface CodexOptions {
   fetchImpl?: FetchLike;
   timeoutMs?: number;
   now?: () => Date;
+  auth?: CodexAuth;
+  provider?: string;
+  expiredMessage?: string;
+}
+
+export function emailFromAccessToken(token: string): string | null {
+  const profile = jwtPayload(token)["https://api.openai.com/profile"];
+  return isObj(profile) ? str(profile["email"]) : null;
 }
 
 export async function fetchCodex(opts: CodexOptions = {}): Promise<ProviderUsage> {
   const now = opts.now ?? (() => new Date());
   const account = opts.account ?? null;
-  const fail = (error: string, auth?: CodexAuth) => failedProvider("codex", "Codex", error, { account: auth?.email ?? account });
-  const home = await resolveCodexHome(account, opts.resolve);
-  if (typeof home !== "string") return fail(home.error);
-  const auth = await readCodexAuth(home);
+  const id = opts.provider ?? "codex";
+  const fail = (error: string, auth?: CodexAuth) => failedProvider(id, "Codex", error, { account: auth?.email ?? account });
+  let auth: CodexAuth | string;
+  if (opts.auth) {
+    auth = opts.auth;
+  } else {
+    const home = await resolveCodexHome(account, opts.resolve);
+    if (typeof home !== "string") return fail(home.error);
+    auth = await readCodexAuth(home);
+  }
   if (typeof auth === "string") return fail(auth);
-  const expired = `Codex 토큰 만료 (${auth.email ?? account ?? "기본 계정"}) - CodexBar 앱을 열거나 codex로 다시 로그인하세요`;
+  const expired = opts.expiredMessage ?? `Codex 토큰 만료 (${auth.email ?? account ?? "기본 계정"}) - CodexBar 앱을 열거나 codex로 다시 로그인하세요`;
   if (auth.expiresAt !== null && auth.expiresAt <= now().getTime()) return fail(expired, auth);
   const headers: Record<string, string> = { Authorization: `Bearer ${auth.accessToken}`, "User-Agent": "codex_cli_rs" };
   if (auth.accountId) headers["ChatGPT-Account-Id"] = auth.accountId;
@@ -138,7 +152,7 @@ export async function fetchCodex(opts: CodexOptions = {}): Promise<ProviderUsage
   const at = now();
   const parsed = parseCodexUsage(res.json, at);
   return {
-    provider: "codex",
+    provider: id,
     displayName: "Codex",
     plan: parsed.plan,
     account: parsed.account ?? auth.email,
