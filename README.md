@@ -23,7 +23,13 @@ Claude와 Codex는 각 CLI가 이미 저장해 둔 로그인 토큰으로 사용
 
 - Claude: 키체인의 `Claude Code-credentials` 토큰으로 `api.anthropic.com/api/oauth/usage` 조회
 - Codex: `auth.json` 토큰으로 `chatgpt.com/backend-api/wham/usage` 조회
-- **omo 계정:** omo에 등록한 Claude·GPT 계정(`~/.omo/agent/auth.json`)을 전부 읽어 계정마다 따로 보여 줍니다. omo에서 계정을 추가하면 다음 갱신 때 자동으로 나타납니다. Claude Code·Codex 로그인과 같은 계정(같은 이메일)은 한 번만 보여 줍니다. 토큰이 만료된 omo 계정은 "omo에서 다시 로그인" 안내가 뜹니다.
+- **계정 출처:** 이 맥에 로그인된 Claude·Codex 계정을 아래 곳에서 모두 찾아 계정마다 따로 보여 줍니다. 어디서든 계정을 추가하면 다음 갱신 때 자동으로 나타납니다.
+  - omo (`~/.omo/agent/auth.json`, 여러 계정)
+  - Claude Code (키체인)
+  - codex CLI (`~/.codex` 또는 `CODEX_HOME`)
+  - CodexBar 관리 계정
+  - OpenCode (`~/.local/share/opencode/auth.json`)
+- 같은 이메일은 한 줄로 합치고, 유효한 토큰 중 가장 오래 가는 것을 씁니다. 줄 옆에 그 계정이 로그인된 곳이 모두 표시됩니다. 전부 만료된 계정은 어디서 다시 로그인하면 되는지 알려 줍니다.
 
 두 API 모두 공개 문서가 없는 내부 API라 바뀔 수 있습니다. 토큰은 읽기만 하고 갱신하지 않습니다.
 
@@ -48,7 +54,6 @@ bun run build   # dist/aiusage 단일 바이너리 생성
 | --- | --- |
 | `--once` | 한 번 출력하고 종료 |
 | `--interval <초>` | 새로고침 주기, 기본값 60, 최소 15 |
-| `--codex-account <이메일>` | 표시할 Codex 계정 |
 | `--codexbar` | codexbar CLI로 Cursor 등 다른 프로바이더도 함께 표시 (호출당 약 12초) |
 | `--fixture <path>` | 저장해 둔 codexbar JSON으로 렌더 |
 | `--no-color` | 색상 끄기 |
@@ -59,10 +64,10 @@ bun run build   # dist/aiusage 단일 바이너리 생성
 `~/.config/aiusage/config.json` (명령줄 옵션이 우선합니다)
 
 ```json
-{ "codexAccount": "product@example.com", "codexbar": false }
+{ "sources": { "opencode": false }, "hide": ["old@example.com"], "codexbar": false }
 ```
 
-`"omoAccounts": false`로 omo 계정 표시를 끌 수 있습니다. `codexAccount`는 CodexBar 관리 계정(`managed-codex-accounts.json`)에서 이메일로 찾고, 없으면 `~/.codex` 로그인 계정과 비교합니다. 비워 두면 `CODEX_HOME` 또는 `~/.codex` 계정을 씁니다.
+`sources`로 출처를 끌 수 있습니다(`omo`, `claudeCode`, `codexCli`, `codexBar`, `opencode`, 기본은 모두 켜짐). `hide`에 이메일을 넣으면 그 계정은 숨깁니다.
 
 ## omo 확장 (herdr pane)
 
@@ -89,7 +94,7 @@ herdr는 같은 탭 안에서 pane을 바로 옮기지 못해서, 잠깐 임시 
 설정 파일의 `pane` 항목으로 바꿀 수 있습니다:
 
 ```json
-{ "codexAccount": "product@example.com", "pane": { "autoOpen": true, "direction": "down", "ratio": 0.75 } }
+{ "pane": { "autoOpen": true, "direction": "down", "ratio": 0.75 } }
 ```
 
 `ratio`는 원래 pane이 차지할 비율입니다(0.75면 사용량 pane이 아래 25%). `autoOpen: false`면 `/usage-pane`으로만 엽니다.

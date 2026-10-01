@@ -16,7 +16,6 @@ const USAGE = `aiusage - 구독 중인 AI 사용량 대시보드 (Claude·Codex 
 옵션:
   --once                   한 번 출력하고 종료
   --interval <초>          라이브 모드 갱신 주기 (기본 60, 최소 15)
-  --codex-account <이메일>  표시할 Codex 계정 (CodexBar 관리 계정 또는 ~/.codex 로그인)
   --codexbar               codexbar CLI로 Cursor 등 다른 프로바이더도 함께 표시 (느림)
   --fixture <경로>         codexbar JSON 파일로 렌더 (네트워크 없이 확인용)
   --close-pane <id>        이 뷰어가 도는 herdr pane id. 종료할 때 닫고, 배치 키를 켬 (omo 확장이 사용)
@@ -27,7 +26,8 @@ const USAGE = `aiusage - 구독 중인 AI 사용량 대시보드 (Claude·Codex 
 키: q / Ctrl-C 종료, r 즉시 새로고침
 herdr pane 안에서: 방향키 하나 = 그 방향으로 한 칸 이동(옆 pane 하나를 건넘), 방향키 두 개를 0.2초 안에 연달아(↑→ 등) = 탭의 그 모서리
                    숫자 8 2 4 6 = 에이전트 pane의 위·아래·왼쪽·오른쪽, 7 9 1 3 = 탭의 모서리
-설정 파일: ${CONFIG_PATH}  예) {"codexAccount": "me@example.com", "codexbar": false}
+설정 파일: ${CONFIG_PATH}  예) {"sources": {"opencode": false}, "hide": ["old@example.com"]}
+계정 출처: omo, Claude Code, codex CLI(~/.codex), CodexBar, OpenCode. 같은 이메일은 한 줄로 합침
 환경변수: CODEX_HOME (기본 Codex 로그인 위치), CODEXBAR_BIN (codexbar 실행 파일 경로)
 `;
 
@@ -52,7 +52,6 @@ function parseConfig(argv: string[], file: SourceConfig): Config {
         once: { type: "boolean", default: false },
         interval: { type: "string" },
         fixture: { type: "string" },
-        "codex-account": { type: "string" },
         codexbar: { type: "boolean" },
         "close-pane": { type: "string" },
         anchor: { type: "string" },
@@ -79,11 +78,7 @@ function parseConfig(argv: string[], file: SourceConfig): Config {
     intervalSec = Math.max(15, n);
   }
   const color = !v["no-color"] && process.env["NO_COLOR"] === undefined && process.stdout.isTTY === true;
-  const sources: SourceConfig = {
-    codexAccount: v["codex-account"] ?? file.codexAccount,
-    codexbar: v.codexbar ?? file.codexbar,
-    omoAccounts: file.omoAccounts,
-  };
+  const sources: SourceConfig = { ...file, codexbar: v.codexbar ?? file.codexbar };
   return { once: v.once === true, intervalSec, fixture: v.fixture ?? null, color, sources, closePane: v["close-pane"] ?? null, anchor: v.anchor ?? null };
 }
 
