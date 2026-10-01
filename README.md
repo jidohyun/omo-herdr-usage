@@ -67,7 +67,13 @@ bun run build   # dist/aiusage 단일 바이너리 생성
 { "sources": { "opencode": false }, "hide": ["old@example.com"], "codexbar": false }
 ```
 
-`sources`로 출처를 끌 수 있습니다(`omo`, `claudeCode`, `codexCli`, `codexBar`, `opencode`, 기본은 모두 켜짐). `hide`에 이메일을 넣으면 그 계정은 숨깁니다.
+`sources`로 출처를 끌 수 있습니다(`omo`, `claudeCode`, `codexCli`, `codexBar`, `opencode`, 기본은 모두 켜짐). `hide`에 이메일이나 계정 ID(`claude:opencode`처럼 `종류:이메일` 또는 이메일이 없으면 `종류:출처`)를 넣으면 그 계정은 숨깁니다. 숨긴 계정은 조회하지도 않습니다.
+
+보통은 직접 고칠 필요 없이, 뷰어에서 `a`를 눌러 고르면 됩니다.
+
+## 표시할 계정 고르기
+
+뷰어(사용량 pane)에서 `a`를 누르면 찾은 계정이 체크박스 목록으로 나옵니다. `↑`/`↓`(또는 `j`/`k`)로 고르고 `Space`로 켜고 끈 뒤 `Enter`로 저장합니다. `Esc`는 취소입니다. 저장하면 설정 파일의 `hide`에 기록되고, 다른 사용량 pane에도 다음 갱신 때 반영됩니다.
 
 ## omo 확장 (herdr pane)
 
@@ -103,6 +109,7 @@ herdr는 같은 탭 안에서 pane을 바로 옮기지 못해서, 잠깐 임시 
 
 - `q` 또는 `Ctrl-C`: 종료
 - `r`: 즉시 새로고침
+- `a`: 표시할 계정 고르기
 
 ## 개발
 

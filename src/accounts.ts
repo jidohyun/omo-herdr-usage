@@ -159,19 +159,22 @@ const DEFAULT_SOURCES: Record<keyof SourceToggles, () => Promise<Candidate[]>> =
   opencode: () => opencodeCandidates(),
 };
 
-function providerId(a: Account): string {
+export function providerId(a: Account): string {
   return `${a.kind}:${a.email?.toLowerCase() ?? a.use.origin}`;
 }
 
-function label(a: Account): string {
+export function accountLabel(a: Account): string {
   return a.email ? `${a.email} · ${a.origins.join(", ")}` : a.origins.join(", ");
 }
 
-export async function collectAccounts(toggles: SourceToggles, deps: CollectDeps = {}, hide: string[] = []): Promise<ProviderUsage[]> {
+export function isHidden(a: Account, hide: string[]): boolean {
+  const keys = [providerId(a).toLowerCase(), ...(a.email ? [a.email.toLowerCase()] : [])];
+  return hide.some((h) => keys.includes(h.toLowerCase()));
+}
+
+export async function listAccounts(toggles: SourceToggles, deps: CollectDeps = {}): Promise<Account[]> {
   const now = deps.now ?? Date.now;
   const profileOf = deps.profileOf ?? ((t: string) => claudeProfile(t));
-  const runClaude = deps.fetchClaudeImpl ?? fetchClaude;
-  const runCodex = deps.fetchCodexImpl ?? fetchCodex;
   const sources = { ...DEFAULT_SOURCES, ...deps.sources };
   const keys = (Object.keys(sources) as Array<keyof SourceToggles>).filter((k) => toggles[k]);
   const found = (await Promise.all(keys.map((k) => sources[k]().catch(() => [] as Candidate[])))).flat();
@@ -182,25 +185,29 @@ export async function collectAccounts(toggles: SourceToggles, deps: CollectDeps 
       return { ...c, email: c.email ?? p.email, plan: p.plan };
     }),
   );
-  const accounts = groupAccounts(enriched, now()).filter((a) => !a.email || !hide.includes(a.email.toLowerCase()));
-  const claude = accounts.filter((a) => a.kind === "claude");
-  const codex = accounts.filter((a) => a.kind === "codex");
+  const accounts = groupAccounts(enriched, now());
+  return [...accounts.filter((a) => a.kind === "claude"), ...accounts.filter((a) => a.kind === "codex")];
+}
+
+export async function collectAccounts(toggles: SourceToggles, deps: CollectDeps = {}, hide: string[] = []): Promise<ProviderUsage[]> {
+  const runClaude = deps.fetchClaudeImpl ?? fetchClaude;
+  const runCodex = deps.fetchCodexImpl ?? fetchCodex;
+  const accounts = (await listAccounts(toggles, deps)).filter((a) => !isHidden(a, hide));
   const expired = (a: Account) => `토큰 만료 (${a.use.origin}) - ${a.use.relogin}`;
-  return Promise.all([
-    ...claude.map((a) =>
-      runClaude({
-        provider: providerId(a),
-        account: label(a),
-        expiredMessage: expired(a),
-        readCredentials: async () => ({ accessToken: a.use.token, expiresAt: a.use.expires, plan: a.plan }),
-      }),
+  return Promise.all(
+    accounts.map((a) =>
+      a.kind === "claude"
+        ? runClaude({
+            provider: providerId(a),
+            account: accountLabel(a),
+            expiredMessage: expired(a),
+            readCredentials: async () => ({ accessToken: a.use.token, expiresAt: a.use.expires, plan: a.plan }),
+          })
+        : runCodex({
+            provider: providerId(a),
+            expiredMessage: expired(a),
+            auth: { accessToken: a.use.token, accountId: a.use.accountId, email: a.email, expiresAt: a.use.expires },
+          }).then((p) => ({ ...p, account: accountLabel(a) })),
     ),
-    ...codex.map((a) =>
-      runCodex({
-        provider: providerId(a),
-        expiredMessage: expired(a),
-        auth: { accessToken: a.use.token, accountId: a.use.accountId, email: a.email, expiresAt: a.use.expires },
-      }).then((p) => ({ ...p, account: label(a) })),
-    ),
-  ]);
+  );
 }

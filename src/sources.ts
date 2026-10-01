@@ -1,5 +1,6 @@
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ALL_SOURCES, collectAccounts, type SourceToggles } from "./accounts";
 import { sharedFetch } from "./cache";
 import { claudeCooldown } from "./claude";
@@ -39,6 +40,20 @@ export async function loadConfig(path = CONFIG_PATH): Promise<SourceConfig | str
     return `설정 파일을 해석할 수 없음: ${path}`;
   }
   return parseConfig(raw) ?? `설정 파일 형식이 올바르지 않음: ${path}`;
+}
+
+export async function saveHide(hide: string[], path = CONFIG_PATH): Promise<void> {
+  const file = Bun.file(path);
+  let raw: Record<string, unknown> = {};
+  if (await file.exists()) {
+    const parsed: unknown = await file.json();
+    if (!isObj(parsed)) throw new Error(`설정 파일 형식이 올바르지 않음: ${path}`);
+    raw = parsed;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ ...raw, hide }, null, 2) + "\n");
+  renameSync(tmp, path);
 }
 
 const DIRECT = new Set(["claude", "codex"]);

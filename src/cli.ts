@@ -6,7 +6,9 @@ import { parseCodexbarJson } from "./codexbar";
 import { renderDashboard } from "./render";
 import { herdrPane } from "./herdr";
 import { ARROW_SIDES, ArrowCombo, KEY_POSITIONS, placePane, type Position } from "./placement";
-import { CONFIG_PATH, fetchShared, loadConfig, type SourceConfig } from "./sources";
+import { listAccounts } from "./accounts";
+import { Picker, pickerItems, renderPicker } from "./picker";
+import { CONFIG_PATH, fetchShared, loadConfig, saveHide, type SourceConfig } from "./sources";
 import type { Snapshot } from "./types";
 
 const USAGE = `aiusage - 구독 중인 AI 사용량 대시보드 (Claude·Codex 사용량 API 직접 조회)
@@ -23,7 +25,7 @@ const USAGE = `aiusage - 구독 중인 AI 사용량 대시보드 (Claude·Codex 
   --no-color               색상 끄기 (NO_COLOR 환경변수도 지원)
   -h, --help               도움말
 
-키: q / Ctrl-C 종료, r 즉시 새로고침
+키: q / Ctrl-C 종료, r 즉시 새로고침, a 표시할 계정 고르기
 herdr pane 안에서: 방향키 하나 = 그 방향으로 한 칸 이동(옆 pane 하나를 건넘), 방향키 두 개를 0.2초 안에 연달아(↑→ 등) = 탭의 그 모서리
                    숫자 8 2 4 6 = 에이전트 pane의 위·아래·왼쪽·오른쪽, 7 9 1 3 = 탭의 모서리
 설정 파일: ${CONFIG_PATH}  예) {"sources": {"opencode": false}, "hide": ["old@example.com"]}
@@ -123,8 +125,11 @@ function runLive(cfg: Config): void {
   let restored = false;
   let placing = false;
   let renderedLines = 0;
+  let picking = false;
+  let picker: Picker | null = null;
+  let pickerStatus: string | null = null;
   let notice: { text: string; until: number } | null = null;
-  const baseFooter = cfg.closePane === null ? " q 종료 · r 새로고침" : " q 종료 · r 새로고침 · 방향키 한 칸 이동 · 두 방향 연달아(↑→) 모서리";
+  const baseFooter = cfg.closePane === null ? " q 종료 · r 새로고침 · a 계정" : " q 종료 · r 새로고침 · a 계정 · 방향키 한 칸 이동 · 두 방향 연달아(↑→) 모서리";
 
   const restore = () => {
     if (restored) return;
@@ -145,7 +150,9 @@ function runLive(cfg: Config): void {
 
   function draw() {
     const rows = out.rows || 40;
-    const all = renderDashboard(snapshot, {
+    const all = picking
+      ? renderPicker(picker, { width: out.columns || 100, color: cfg.color, status: pickerStatus })
+      : renderDashboard(snapshot, {
       now: new Date(),
       width: out.columns || 100,
       color: cfg.color,
@@ -163,6 +170,8 @@ function runLive(cfg: Config): void {
     fetching = true;
     if (refreshTimer) clearTimeout(refreshTimer);
     draw();
+    const latest = cfg.fixture === null ? await loadConfig() : null;
+    if (latest && typeof latest !== "string") cfg.sources = { ...latest, codexbar: cfg.sources.codexbar };
     const next = await loadSnapshot(cfg, manual ? MANUAL_MAX_AGE_MS : Math.max(MANUAL_MAX_AGE_MS, cfg.intervalSec * 1000 - 5000));
     fetching = false;
     if (restored) return;
@@ -191,6 +200,51 @@ function runLive(cfg: Config): void {
 
   const combo = new ArrowCombo((position) => void place(position, true));
 
+  const openPicker = async () => {
+    if (picking || cfg.fixture !== null) return;
+    picking = true;
+    picker = null;
+    pickerStatus = "계정 찾는 중…";
+    draw();
+    const latest = await loadConfig();
+    if (typeof latest !== "string") cfg.sources = { ...latest, codexbar: cfg.sources.codexbar };
+    try {
+      picker = new Picker(pickerItems(await listAccounts(cfg.sources.sources), cfg.sources.hide));
+      pickerStatus = null;
+    } catch (error) {
+      pickerStatus = `⚠ ${error instanceof Error ? error.message : String(error)}`;
+    }
+    draw();
+  };
+
+  const closePicker = async (save: boolean) => {
+    if (save && picker) {
+      const hide = picker.nextHide(cfg.sources.hide);
+      try {
+        await saveHide(hide);
+        cfg.sources = { ...cfg.sources, hide };
+        const shown = picker.items.filter((i) => i.shown).length;
+        notice = { text: `계정 ${shown}/${picker.items.length}개 표시로 저장`, until: Date.now() + 4000 };
+      } catch (error) {
+        notice = { text: `⚠ 저장 실패: ${error instanceof Error ? error.message : String(error)}`, until: Date.now() + 8000 };
+      }
+    }
+    picking = false;
+    picker = null;
+    draw();
+    if (save) void refresh(true);
+  };
+
+  const pickerKey = (key: string) => {
+    if (key === "\u0003") return quit(0);
+    if (key === "\x1b[A" || key === "\x1bOA" || key === "k") picker?.move(-1);
+    else if (key === "\x1b[B" || key === "\x1bOB" || key === "j") picker?.move(1);
+    else if (key === " ") picker?.toggle();
+    else if (key === "\r" || key === "\n") return void closePicker(true);
+    else if (key === "\x1b" || key === "q" || key === "a" || key === "A") return void closePicker(false);
+    draw();
+  };
+
   process.on("SIGINT", () => quit(0));
   process.on("SIGTERM", () => quit(0));
   process.on("uncaughtException", (e) => {
@@ -209,7 +263,9 @@ function runLive(cfg: Config): void {
   stdin.setEncoding("utf8");
   stdin.on("data", (chunk: string) => {
     for (const [key] of chunk.matchAll(/\x1b\[[A-D]|\x1bO[A-D]|[\s\S]/g)) {
-      if (key === "q" || key === "Q" || key === "\u0003") quit(0);
+      if (picking) pickerKey(key);
+      else if (key === "q" || key === "Q" || key === "\u0003") quit(0);
+      else if (key === "a" || key === "A") void openPicker();
       else if (key === "r" || key === "R") void refresh(true);
       else if (ARROW_SIDES[key] && cfg.closePane !== null) combo.press(ARROW_SIDES[key]);
       else if (KEY_POSITIONS[key]) void place(KEY_POSITIONS[key], false);

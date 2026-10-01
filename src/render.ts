@@ -21,7 +21,7 @@ function padStart(text: string, target: number): string {
   return " ".repeat(Math.max(0, target - width(text))) + text;
 }
 
-function truncate(line: string, max: number, color: boolean): string {
+export function truncate(line: string, max: number, color: boolean): string {
   if (width(line) <= max) return line;
   let out = "";
   let used = 0;
