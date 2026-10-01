@@ -1,0 +1,29 @@
+{
+  "name": "omo-herdr-usage",
+  "version": "0.1.0",
+  "description": "AI subscription usage (Claude, Codex) in a Herdr side pane for OmO",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jidohyun/omo-herdr-usage.git"
+  },
+  "homepage": "https://github.com/jidohyun/omo-herdr-usage",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "aiusage": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "once": "bun run src/cli.ts --once",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/cli.ts --compile --outfile dist/aiusage",
+    "omo:install": "bun scripts/omo-install.ts install",
+    "omo:uninstall": "bun scripts/omo-install.ts uninstall"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}
